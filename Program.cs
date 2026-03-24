@@ -1,10 +1,15 @@
+using FintachartsAPI.BackgroundServices;
 using FintachartsAPI.Configuration;
 using FintachartsAPI.Data;
 using FintachartsAPI.Services;
+using FintachartsAPI.State;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton<MarketStateCache>();
+builder.Services.AddHostedService<FintachartsWebSocketListener>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
