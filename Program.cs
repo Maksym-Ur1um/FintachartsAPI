@@ -1,11 +1,24 @@
+using FintachartsAPI.Configuration;
 using FintachartsAPI.Data;
+using FintachartsAPI.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
+
+builder.Services.Configure<FintachartsOptions>(
+    builder.Configuration.GetSection(FintachartsOptions.SectionName));
+
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IFintachartsAuthService, FintachartsAuthService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
 });
 
 builder.Services.AddControllers();
