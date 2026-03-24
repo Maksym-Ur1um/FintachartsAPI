@@ -15,7 +15,13 @@ builder.Services.Configure<FintachartsOptions>(
     builder.Configuration.GetSection(FintachartsOptions.SectionName));
 
 builder.Services.AddMemoryCache();
+
 builder.Services.AddHttpClient<IFintachartsAuthService, FintachartsAuthService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
+builder.Services.AddHttpClient<IFintachartsDataService, FintachartsDataService>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
@@ -26,6 +32,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+using var scope = app.Services.CreateScope();
+var dataService = scope.ServiceProvider.GetRequiredService<IFintachartsDataService>();
+await dataService.InitializeAssetsAsync();
 
 if (app.Environment.IsDevelopment())
 {

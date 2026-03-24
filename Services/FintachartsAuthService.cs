@@ -44,16 +44,16 @@ namespace FintachartsAPI.Services
             response.EnsureSuccessStatusCode();
 
             var responseString = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonSerializer.Deserialize<TokenResponseDto>(responseString);
-            if (responseJson == null || String.IsNullOrEmpty(responseJson.AccessToken))
+            var responseDto = JsonSerializer.Deserialize<TokenResponseDto>(responseString);
+            if (responseDto == null || String.IsNullOrEmpty(responseDto.AccessToken))
             {
                 throw new InvalidOperationException("Failed to retrieve or deserialize the access token from Fintacharts API.");
             }
-            var expiresIn = DateTimeOffset.UtcNow.AddSeconds(responseJson.ExpiresIn - 30);
+            var expiresIn = DateTimeOffset.UtcNow.AddSeconds(responseDto.ExpiresIn - 30);
 
-            _memoryCache.Set("FintaToken", responseJson.AccessToken, expiresIn);
+            _memoryCache.Set("FintaToken", responseDto.AccessToken, expiresIn);
 
-            return responseJson.AccessToken;
+            return responseDto.AccessToken;
         }
 
         private record TokenResponseDto(
