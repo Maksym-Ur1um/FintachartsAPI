@@ -10,14 +10,5 @@ namespace FintachartsAPI.Data
         }
 
         public DbSet<Asset> Assets { get; set; }
-        public DbSet<AssetPrice> AssetPrices { get; set; }
-
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-            modelBuilder.Entity<AssetPrice>()
-                .Property(p => p.Price)
-                .HasColumnType("decimal(18,6)");
-        }
     }
 }
