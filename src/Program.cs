@@ -1,6 +1,8 @@
 using FintachartsAPI.BackgroundServices;
+using FintachartsAPI.Clients;
 using FintachartsAPI.Configuration;
 using FintachartsAPI.Data;
+using FintachartsAPI.Extensions;
 using FintachartsAPI.Services;
 using FintachartsAPI.State;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<MarketStateCache>();
 builder.Services.AddHostedService<FintachartsWebSocketListener>();
+builder.Services.AddScoped<IFintachartsAuthService, FintachartsAuthService>();
+builder.Services.AddScoped<IFintachartsDataService, FintachartsDataService>();
+builder.Services.AddScoped<IAssetPriceService, AssetPriceService>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -21,17 +26,7 @@ builder.Services.Configure<FintachartsOptions>(
 
 builder.Services.AddMemoryCache();
 
-builder.Services.AddHttpClient<IFintachartsAuthService, FintachartsAuthService>((serviceProvider, client) =>
-{
-    var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl);
-});
-builder.Services.AddHttpClient<IFintachartsDataService, FintachartsDataService>((serviceProvider, client) =>
-{
-    var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl);
-});
-builder.Services.AddHttpClient<IAssetPriceService, AssetPriceService>((serviceProvider, client) =>
+builder.Services.AddHttpClient<IFintachartsApiClient, FintachartsApiClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
@@ -42,6 +37,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+await app.ApplyDatabaseMigrationsAsync();
 
 using var scope = app.Services.CreateScope();
 var dataService = scope.ServiceProvider.GetRequiredService<IFintachartsDataService>();
