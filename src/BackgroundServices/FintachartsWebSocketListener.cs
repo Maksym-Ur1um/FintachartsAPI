@@ -3,6 +3,7 @@ using FintachartsAPI.Data;
 using FintachartsAPI.Models;
 using FintachartsAPI.Services;
 using FintachartsAPI.State;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Net.WebSockets;
 using System.Text.Json;
@@ -32,11 +33,8 @@ namespace FintachartsAPI.BackgroundServices
         {
             _logger.LogInformation("WebSocket Listener starting...");
 
-            using var scope = _serviceScopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            List<Asset> assets = dbContext.Assets.ToList();
-            _logger.LogInformation($"Loaded {assets.Count()} assets");
+            List<Asset> assets = await GetAssetsFromDatabaseAsync();
+            _logger.LogInformation($"Loaded {assets.Count} assets");
 
             Dictionary<string, string> idToSymbol = new Dictionary<string, string>();
             foreach (var asset in assets)
@@ -46,82 +44,111 @@ namespace FintachartsAPI.BackgroundServices
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var authService = scope.ServiceProvider.GetRequiredService<IFintachartsAuthService>();
-                string token = await authService.GetTokenAsync();
-
-                _logger.LogInformation("Token retrieved, preparing to connect...");
-                Uri connectionUrl = new($"{_options.Value.WssUrl}/api/streaming/ws/v1/realtime?token={token}");
-                using ClientWebSocket clientWebSocket = new ClientWebSocket();
                 try
                 {
-                    await clientWebSocket.ConnectAsync(connectionUrl, stoppingToken);
-                    _logger.LogInformation("WebSocket successfully connected");
+                    using ClientWebSocket clientWebSocket = new ClientWebSocket();
 
-                    foreach (var asset in assets)
-                    {
-                        var subRequest = new WssSubscriptionRequest(
-                            type: "l1-subscription",
-                            id: "1",
-                            instrumentId: asset.FintachartsId.ToString(),
-                            provider: asset.Provider,
-                            subscribe: true,
-                            kinds: ["last"]
-                        );
-
-                        string jsonMessage = System.Text.Json.JsonSerializer.Serialize(subRequest);
-                        byte[] messageBytes = System.Text.Encoding.UTF8.GetBytes(jsonMessage);
-
-                        await clientWebSocket.SendAsync(messageBytes, WebSocketMessageType.Text, true, stoppingToken);
-                    }
-                    _logger.LogInformation("Sent subscription requests for all assets.");
-
-                    var buffer = new byte[4096];
-
-                    while (clientWebSocket.State == WebSocketState.Open && !stoppingToken.IsCancellationRequested)
-                    {
-                        using var memoryStream = new MemoryStream();
-                        ValueWebSocketReceiveResult result;
-                        do
-                        {
-                            result = await clientWebSocket.ReceiveAsync(new Memory<byte>(buffer), stoppingToken);
-
-                            if (result.MessageType == WebSocketMessageType.Close)
-                            {
-                                _logger.LogInformation("WebSocket connection closed");
-                                break;
-                            }
-
-                            memoryStream.Write(buffer, 0, result.Count);
-                        } while (!result.EndOfMessage);
-
-                        byte[] completeMessage = memoryStream.ToArray();
-                        string jsonMessage = System.Text.Encoding.UTF8.GetString(completeMessage);
-
-                        using JsonDocument document = JsonDocument.Parse(jsonMessage);
-                        JsonElement root = document.RootElement;
-
-                        if (root.TryGetProperty("type", out JsonElement typeElement) && typeElement.GetString() == "l1-update")
-                        {
-                            string instrumentId = root.GetProperty("instrumentId").GetString();
-
-                            if (idToSymbol.TryGetValue(instrumentId, out var symbol))
-                            {
-                                if (root.TryGetProperty("last", out JsonElement lastElement))
-                                {
-                                    decimal price = lastElement.GetProperty("price").GetDecimal();
-                                    DateTime timestamp = lastElement.GetProperty("timestamp").GetDateTime();
-
-                                    _marketStateCache.UpdatePrice(symbol, price, timestamp);
-                                }
-                            }
-                        }
-                    }
+                    await ConnectAndSubscribeAsync(clientWebSocket, assets, stoppingToken);
+                    await ListenForMessagesAsync(clientWebSocket, idToSymbol, stoppingToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Critical error occurred while communicating with the Fintacharts WebSocket server.");
                 }
+
                 await Task.Delay(5000, stoppingToken);
+            }
+        }
+
+        private async Task<List<Asset>> GetAssetsFromDatabaseAsync()
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            return await dbContext.Assets.ToListAsync();
+        }
+
+        private async Task ConnectAndSubscribeAsync(ClientWebSocket clientWebSocket, List<Asset> assets, CancellationToken stoppingToken)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var authService = scope.ServiceProvider.GetRequiredService<IFintachartsAuthService>();
+
+            string token = await authService.GetTokenAsync();
+            _logger.LogInformation("Token retrieved, preparing to connect...");
+
+            Uri connectionUrl = new($"{_options.Value.WssUrl}/api/streaming/ws/v1/realtime?token={token}");
+
+            await clientWebSocket.ConnectAsync(connectionUrl, stoppingToken);
+            _logger.LogInformation("WebSocket successfully connected");
+
+            foreach (var asset in assets)
+            {
+                var subRequest = new WssSubscriptionRequest(
+                    type: "l1-subscription",
+                    id: "1",
+                    instrumentId: asset.FintachartsId.ToString(),
+                    provider: asset.Provider,
+                    subscribe: true,
+                    kinds: ["last"]
+                );
+
+                string jsonMessage = JsonSerializer.Serialize(subRequest);
+                byte[] messageBytes = System.Text.Encoding.UTF8.GetBytes(jsonMessage);
+
+                await clientWebSocket.SendAsync(messageBytes, WebSocketMessageType.Text, true, stoppingToken);
+            }
+
+            _logger.LogInformation("Sent subscription requests for all assets.");
+        }
+
+        private async Task ListenForMessagesAsync(ClientWebSocket clientWebSocket, Dictionary<string, string> idToSymbol, CancellationToken stoppingToken)
+        {
+            var buffer = new byte[4096];
+
+            while (clientWebSocket.State == WebSocketState.Open && !stoppingToken.IsCancellationRequested)
+            {
+                using var memoryStream = new MemoryStream();
+                ValueWebSocketReceiveResult result;
+
+                do
+                {
+                    result = await clientWebSocket.ReceiveAsync(new Memory<byte>(buffer), stoppingToken);
+
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        _logger.LogInformation("WebSocket connection closed");
+                        return;
+                    }
+
+                    memoryStream.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
+
+                byte[] completeMessage = memoryStream.ToArray();
+                string jsonMessage = System.Text.Encoding.UTF8.GetString(completeMessage);
+
+                ProcessReceivedMessage(jsonMessage, idToSymbol);
+            }
+        }
+
+        private void ProcessReceivedMessage(string jsonMessage, Dictionary<string, string> idToSymbol)
+        {
+            using JsonDocument document = JsonDocument.Parse(jsonMessage);
+            JsonElement root = document.RootElement;
+
+            if (root.TryGetProperty("type", out JsonElement typeElement) && typeElement.GetString() == "l1-update")
+            {
+                string instrumentId = root.GetProperty("instrumentId").GetString()!;
+
+                if (idToSymbol.TryGetValue(instrumentId, out var symbol))
+                {
+                    if (root.TryGetProperty("last", out JsonElement lastElement))
+                    {
+                        decimal price = lastElement.GetProperty("price").GetDecimal();
+                        DateTime timestamp = lastElement.GetProperty("timestamp").GetDateTime();
+
+                        _marketStateCache.UpdatePrice(symbol, price, timestamp);
+                    }
+                }
             }
         }
 
