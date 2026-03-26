@@ -1,6 +1,7 @@
 ﻿using FintachartsAPI.Clients;
 using FintachartsAPI.Data;
 using FintachartsAPI.DTOs;
+using FintachartsAPI.Models;
 using FintachartsAPI.State;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,29 +50,49 @@ namespace FintachartsAPI.Services
                     _logger.LogInformation($"Fetching prices for: {dbAssets.Count} assets that were not in cache...");
                     var token = await _authService.GetTokenAsync();
 
+                    using var semaphore = new SemaphoreSlim(5);
+                    var fetchTasks = new List<Task<AssetPriceResponseDto?>>();
+
                     foreach (var asset in dbAssets)
                     {
-                        try
-                        {
-                            var historicalData = await _apiClient.GetHistoricalBarsAsync(
-                                token, asset.FintachartsId.ToString(), asset.Provider);
-
-                            var lastBar = historicalData?.Data?.FirstOrDefault();
-
-                            if (lastBar != null)
-                            {
-                                _marketStatceCache.UpdatePrice(asset.Symbol, lastBar.ClosePrice, lastBar.Timestamp);
-                                results.Add(new AssetPriceResponseDto(asset.Symbol, lastBar.ClosePrice, lastBar.Timestamp));
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, $"Failed to fetch {asset.Symbol}");
-                        }
+                        fetchTasks.Add(FetchAssetPriceAsync(asset, token, semaphore));
                     }
+                    var fetchedAssets = await Task.WhenAll(fetchTasks);
+                    results.AddRange(fetchedAssets.Where(a => a != null)!);
                 }
             }
             return results;
+        }
+
+        private async Task<AssetPriceResponseDto?> FetchAssetPriceAsync(
+            Asset asset, string token, SemaphoreSlim semaphore)
+        {
+            await semaphore.WaitAsync();
+
+            try
+            {
+                var historicalData = await _apiClient.GetHistoricalBarsAsync(
+                    token, asset.FintachartsId.ToString(), asset.Provider);
+
+                var lastBar = historicalData?.Data?.FirstOrDefault();
+
+                if (lastBar != null)
+                {
+                    _marketStatceCache.UpdatePrice(asset.Symbol, lastBar.ClosePrice, lastBar.Timestamp);
+                    return new AssetPriceResponseDto(asset.Symbol, lastBar.ClosePrice, lastBar.Timestamp);
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to fetch {asset.Symbol}");
+                return null;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
     }
 }
