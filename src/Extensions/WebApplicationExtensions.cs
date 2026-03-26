@@ -6,7 +6,7 @@ namespace FintachartsAPI.Extensions
 {
     public static class WebApplicationExtensions
     {
-        public static async Task ApplyDatabaseMigrationsAsync(this WebApplication app)
+        public static async Task InitDatabase(this WebApplication app)
         {
             using var scope = app.Services.CreateScope();
 

@@ -10,7 +10,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-await app.ApplyDatabaseMigrationsAsync();
+await app.InitDatabase();
 
 if (app.Environment.IsDevelopment())
 {

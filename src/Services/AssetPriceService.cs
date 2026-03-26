@@ -41,27 +41,41 @@ namespace FintachartsAPI.Services
 
             if (missingSymbols.Any())
             {
-                var dbAssets = await _appDbContext.Assets
-                    .Where(a => missingSymbols.Contains(a.Symbol))
-                    .ToListAsync();
-
-                if (dbAssets.Any())
-                {
-                    _logger.LogInformation($"Fetching prices for: {dbAssets.Count} assets that were not in cache...");
-                    var token = await _authService.GetTokenAsync();
-
-                    using var semaphore = new SemaphoreSlim(5);
-                    var fetchTasks = new List<Task<AssetPriceResponseDto?>>();
-
-                    foreach (var asset in dbAssets)
-                    {
-                        fetchTasks.Add(FetchAssetPriceAsync(asset, token, semaphore));
-                    }
-                    var fetchedAssets = await Task.WhenAll(fetchTasks);
-                    results.AddRange(fetchedAssets.Where(a => a != null)!);
-                }
+                var fetchedPrices = await FetchMissingPricesAsync(missingSymbols);
+                results.AddRange(fetchedPrices);
             }
+
             return results;
+        }
+
+        private async Task<List<AssetPriceResponseDto>> FetchMissingPricesAsync(List<string> missingSymbols)
+        {
+            var fetchedResults = new List<AssetPriceResponseDto>();
+
+            var dbAssets = await _appDbContext.Assets
+                .Where(a => missingSymbols.Contains(a.Symbol))
+                .ToListAsync();
+
+            if (!dbAssets.Any())
+            {
+                return fetchedResults;
+            }
+
+            _logger.LogInformation($"Fetching prices for: {dbAssets.Count} assets that were not in cache...");
+            var token = await _authService.GetTokenAsync();
+
+            using var semaphore = new SemaphoreSlim(5);
+            var fetchTasks = new List<Task<AssetPriceResponseDto?>>();
+
+            foreach (var asset in dbAssets)
+            {
+                fetchTasks.Add(FetchAssetPriceAsync(asset, token, semaphore));
+            }
+
+            var fetchedAssets = await Task.WhenAll(fetchTasks);
+            fetchedResults.AddRange(fetchedAssets.Where(a => a != null)!);
+
+            return fetchedResults;
         }
 
         private async Task<AssetPriceResponseDto?> FetchAssetPriceAsync(
