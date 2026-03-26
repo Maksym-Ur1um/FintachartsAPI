@@ -1,6 +1,11 @@
-version: '3.8'
-
 services:
+  fintachartsapi:
+    image: ${DOCKER_REGISTRY-}fintachartsapi
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    depends_on:
+       - sqlserver
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: fintacharts_db
