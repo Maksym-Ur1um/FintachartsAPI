@@ -7,7 +7,7 @@ namespace FintachartsAPI.State
         public record AssetPriceData(
             decimal Price,
             DateTime LastUpdate
-            );
+        );
         private readonly ConcurrentDictionary<string, AssetPriceData> _assetPrices = new();
 
         public void UpdatePrice(string symbol, decimal price, DateTime lastUpdate)

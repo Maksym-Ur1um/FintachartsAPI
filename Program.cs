@@ -31,6 +31,11 @@ builder.Services.AddHttpClient<IFintachartsDataService, FintachartsDataService>(
     var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
 });
+builder.Services.AddHttpClient<IAssetPriceService, AssetPriceService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<FintachartsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

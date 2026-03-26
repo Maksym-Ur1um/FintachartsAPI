@@ -63,7 +63,7 @@ namespace FintachartsAPI.BackgroundServices
                         instrumentId: asset.FintachartsId.ToString(),
                         provider: asset.Provider,
                         subscribe: true,
-                        kinds: new[] { "last" }
+                        kinds: ["last"]
                     );
 
                     string jsonMessage = System.Text.Json.JsonSerializer.Serialize(subRequest);
