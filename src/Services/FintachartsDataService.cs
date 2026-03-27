@@ -8,22 +8,18 @@ namespace FintachartsAPI.Services
     {
         private readonly AppDbContext _dbContext;
         private readonly IFintachartsApiClient _apiClient;
-        private readonly IFintachartsAuthService _fintachartsAuthService;
 
         public FintachartsDataService(
             AppDbContext dbContext,
-            IFintachartsApiClient apiClient,
-            IFintachartsAuthService fintachartsAuthService)
+            IFintachartsApiClient apiClient)
         {
             _dbContext = dbContext;
             _apiClient = apiClient;
-            _fintachartsAuthService = fintachartsAuthService;
         }
 
         public async Task InitializeAssetsAsync()
         {
-            string token = await _fintachartsAuthService.GetTokenAsync();
-            var responseDto = await _apiClient.GetInstrumentsAsync(token);
+            var responseDto = await _apiClient.GetInstrumentsAsync();
 
             if (responseDto == null || responseDto.InstrumentData == null)
             {

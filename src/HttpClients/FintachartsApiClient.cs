@@ -1,4 +1,5 @@
 ﻿using FintachartsAPI.DTOs;
+using FintachartsAPI.Services;
 using System.Text.Json.Serialization;
 
 namespace FintachartsAPI.Clients
@@ -6,10 +7,20 @@ namespace FintachartsAPI.Clients
     public class FintachartsApiClient : IFintachartsApiClient
     {
         private readonly HttpClient _httpClient;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public FintachartsApiClient(HttpClient httpClient)
+        public FintachartsApiClient(HttpClient httpClient, IServiceScopeFactory scopeFactory)
         {
             _httpClient = httpClient;
+            _scopeFactory = scopeFactory;
+        }
+
+        private async Task EnsureAuthorizedAsync()
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var authService = scope.ServiceProvider.GetRequiredService<IFintachartsAuthService>();
+            var token = await authService.GetTokenAsync();
+            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
 
         public async Task<(string AccessToken, int ExpiresIn)> GetTokenAsync(string username, string password)
@@ -34,25 +45,25 @@ namespace FintachartsAPI.Clients
             return (responseDto.AccessToken, responseDto.ExpiresIn);
         }
 
-        public async Task<InstrumentsResponseDto?> GetInstrumentsAsync(string token)
+        public async Task<InstrumentsResponseDto?> GetInstrumentsAsync()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/instruments/v1/instruments");
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            await EnsureAuthorizedAsync();
 
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/instruments/v1/instruments");
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
             return await response.Content.ReadFromJsonAsync<InstrumentsResponseDto>();
         }
 
-        public async Task<FintachartsHistoricalResponseDto?> GetHistoricalBarsAsync(string token, string instrumentId, string provider)
+        public async Task<FintachartsHistoricalResponseDto?> GetHistoricalBarsAsync(string instrumentId, string provider)
         {
+            await EnsureAuthorizedAsync();
+
             string url = $"/api/bars/v1/bars/count-back?instrumentId={instrumentId}&provider={provider}&interval=1&periodicity=minute&barsCount=1";
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _httpClient.SendAsync(request);
-
             response.EnsureSuccessStatusCode();
 
             return await response.Content.ReadFromJsonAsync<FintachartsHistoricalResponseDto>();

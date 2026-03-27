@@ -6,8 +6,8 @@ namespace FintachartsAPI.Clients
     {
         Task<(string AccessToken, int ExpiresIn)> GetTokenAsync(string username, string password);
 
-        Task<InstrumentsResponseDto?> GetInstrumentsAsync(string token);
+        Task<InstrumentsResponseDto?> GetInstrumentsAsync();
 
-        Task<FintachartsHistoricalResponseDto?> GetHistoricalBarsAsync(string token, string instrumentId, string provider);
+        Task<FintachartsHistoricalResponseDto?> GetHistoricalBarsAsync(string instrumentId, string provider);
     }
 }
