@@ -27,9 +27,9 @@ Decision:
 * Testing: xUnit, Moq, FluentAssertions
 * Infrastructure: Docker, Docker Compose
 
-## How to Run (Docker - Recommended)
+## How to Run
 
-The easiest and most reliable way to run the application is using Docker Compose. This will automatically spin up the MS SQL Server, apply Entity Framework migrations, seed the database with instruments, and start the API.
+The application is fully containerized. The easiest and most reliable way to run the ecosystem is using Docker Compose. This will automatically spin up the MS SQL Server, apply Entity Framework migrations, seed the database with instruments, and start the API.
 
 1. Ensure Docker Desktop (or Docker Engine) is installed and running.
 2. Open a terminal in the root directory of the project.
@@ -39,20 +39,6 @@ The easiest and most reliable way to run the application is using Docker Compose
 5. Open your browser and navigate to the Swagger UI:
    http://localhost:8080/swagger
 
-## How to Run (Local CLI / dotnet run)
-
-If you prefer to run the application locally without Docker (e.g., for debugging), follow these steps:
-
-1. Database: You must have a local instance of MS SQL Server running.
-2. Configuration: Open appsettings.Development.json (or appsettings.json) and update the DefaultConnection string to point to your local SQL Server instance.
-   Example: "Server=localhost;Database=FintachartsDb;Trusted_Connection=True;TrustServerCertificate=True;"
-3. HTTPS Redirection: The app.UseHttpsRedirection() middleware has been intentionally removed from Program.cs. This ensures smooth execution across both Docker and local HTTP environments without requiring local dev-certs configuration or causing network errors in Swagger.
-4. Run: Execute the following commands in your terminal:
-   cd src/FintachartsAPI
-   dotnet restore
-   dotnet run
-5. Navigate to the port specified in the console output (usually http://localhost:5000/swagger).
-
 ## API Endpoints
 
 Once the application is running, you can interact with the following REST endpoints via Swagger or any HTTP client:
@@ -60,12 +46,12 @@ Once the application is running, you can interact with the following REST endpoi
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | GET | /api/assets | Returns a paginated list of all available financial instruments stored in the database. |
-| GET | /api/assets/prices | Accepts an array of asset symbols (e.g., ?assets=AAPL&assets=A). Returns the latest prices from the real-time cache or fallbacks to historical REST fetching if the cache is empty. |
+| GET | /api/assets/prices | Accepts an array of asset symbols (e.g., ?assets=AAPL&assets=EURUSD). Returns the latest prices from the real-time cache or fallbacks to historical REST fetching if the cache is empty. |
 
 Note: Data seeding happens automatically on the first startup. The API reaches out to Fintacharts, retrieves all instruments, and populates the local SQL database.
 
 ## Running Tests
 
-The solution includes a robust suite of Unit Tests focusing on token management logic. To run the tests, execute:
+The solution includes a robust suite of Unit Tests focusing token management logic. To run the tests, execute:
 
 dotnet test
