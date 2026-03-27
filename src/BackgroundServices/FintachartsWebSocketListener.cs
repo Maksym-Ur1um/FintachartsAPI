@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Net.WebSockets;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FintachartsAPI.BackgroundServices
 {
@@ -132,23 +133,20 @@ namespace FintachartsAPI.BackgroundServices
 
         private void ProcessReceivedMessage(string jsonMessage, Dictionary<string, string> idToSymbol)
         {
-            using JsonDocument document = JsonDocument.Parse(jsonMessage);
-            JsonElement root = document.RootElement;
-
-            if (root.TryGetProperty("type", out JsonElement typeElement) && typeElement.GetString() == "l1-update")
+            try
             {
-                string instrumentId = root.GetProperty("instrumentId").GetString()!;
+                var update = JsonSerializer.Deserialize<WssIncomingMessage>(jsonMessage);
 
-                if (idToSymbol.TryGetValue(instrumentId, out var symbol))
+                if (update?.Type == "l1-update" && update.InstrumentId != null && update.Last != null)
                 {
-                    if (root.TryGetProperty("last", out JsonElement lastElement))
+                    if (idToSymbol.TryGetValue(update.InstrumentId, out var symbol))
                     {
-                        decimal price = lastElement.GetProperty("price").GetDecimal();
-                        DateTime timestamp = lastElement.GetProperty("timestamp").GetDateTime();
-
-                        _marketStateCache.UpdatePrice(symbol, price, timestamp);
+                        _marketStateCache.UpdatePrice(symbol, update.Last.Price, update.Last.Timestamp);
                     }
                 }
+            }
+            catch (JsonException)
+            {
             }
         }
 
@@ -159,6 +157,17 @@ namespace FintachartsAPI.BackgroundServices
             string provider,
             bool subscribe,
             string[] kinds
+        );
+
+        private record WssIncomingMessage(
+            [property: JsonPropertyName("type")] string Type,
+            [property: JsonPropertyName("instrumentId")] string? InstrumentId,
+            [property: JsonPropertyName("last")] WssLastPriceData? Last
+        );
+
+        private record WssLastPriceData(
+            [property: JsonPropertyName("price")] decimal Price,
+            [property: JsonPropertyName("timestamp")] DateTime Timestamp
         );
     }
 }
