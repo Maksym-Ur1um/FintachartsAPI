@@ -1,11 +1,20 @@
+version: '3.8'
+
 services:
   fintachartsapi:
     image: ${DOCKER_REGISTRY-}fintachartsapi
     build:
       context: .
       dockerfile: src/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=FintachartsDb;User Id=sa;Password=SecretPassword0For_FintachartsDB;TrustServerCertificate=True;
     depends_on:
-       - sqlserver
+      sqlserver:
+        condition: service_healthy
+
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: fintacharts_db
@@ -14,3 +23,8 @@ services:
       - MSSQL_SA_PASSWORD=SecretPassword0For_FintachartsDB
     ports:
       - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P SecretPassword0For_FintachartsDB -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
